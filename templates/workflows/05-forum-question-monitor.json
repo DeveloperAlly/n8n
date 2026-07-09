@@ -1,0 +1,29 @@
+{
+  "name": "n8n Forum Question Monitor",
+  "nodes": [
+    { "id": "m1", "name": "Every 30 Minutes", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.3, "position": [0, 112], "parameters": { "rule": { "interval": [{ "field": "minutes", "minutesInterval": 30 }] } } },
+    { "id": "m2", "name": "Fetch Forum Latest", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.4, "position": [224, 112], "parameters": { "method": "GET", "url": "https://community.n8n.io/latest.json", "options": { "response": { "response": { "responseFormat": "json" } } } } },
+    { "id": "m3", "name": "Prep Topics", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [448, 112], "parameters": { "mode": "runOnceForAllItems", "jsCode": "const data=$input.first().json;\nconst topics=(data.topic_list&&data.topic_list.topics)||[];\nconst mapped=topics.slice(0,30).map(t=>({ title:t.title, url:'https://community.n8n.io/t/'+(t.slug||'topic')+'/'+t.id, replies:t.posts_count }));\nreturn [{ json: { topics: mapped } }];" } },
+    { "id": "m4", "name": "Match Against Expertise", "type": "@n8n/n8n-nodes-langchain.agent", "typeVersion": 3.1, "position": [672, 112], "parameters": { "promptType": "define", "text": "=Forum topics (JSON):\n{{ JSON.stringify($json.topics) }}", "hasOutputParser": true, "options": { "systemMessage": "You help a developer advocate find forum questions they can answer well. Expertise: n8n, AI agents, RAG/CAG, MCP, LLM APIs, workflow automation, webhooks, JavaScript. Return only topics that clearly match, each with a short reason and 1-2 talking points. Return JSON with a \"matches\" array of {title, url, reason, talking_points}. If none match, return an empty array." } } },
+    { "id": "m5", "name": "LLM via OpenRouter", "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter", "typeVersion": 1, "position": [688, 336], "parameters": { "model": "anthropic/claude-sonnet-4" } },
+    { "id": "m6", "name": "Matches Parser", "type": "@n8n/n8n-nodes-langchain.outputParserStructured", "typeVersion": 1.3, "position": [816, 336], "parameters": { "schemaType": "fromJson", "jsonSchemaExample": "{ \"matches\": [{ \"title\": \"Question\", \"url\": \"https://community.n8n.io/t/x/1\", \"reason\": \"why\", \"talking_points\": \"points\" }] }" } },
+    { "id": "m7", "name": "Format Digest", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1024, 112], "parameters": { "mode": "runOnceForAllItems", "jsCode": "const out=$input.first().json.output||{};\nconst m=Array.isArray(out.matches)?out.matches:[];\nconst rows=m.map(x=>'<li><a href=\"'+(x.url||'')+'\">'+(x.title||'')+'</a><br/><b>Why:</b> '+(x.reason||'')+'<br/><b>Points:</b> '+(x.talking_points||'')+'</li>').join('');\nconst html=m.length?('<p>'+m.length+' forum question(s) match your expertise:</p><ul>'+rows+'</ul>'):'';\nreturn [{ json: { count:m.length, hasMatches:m.length>0, subject:'n8n forum: '+m.length+' match your expertise', html } }];" } },
+    { "id": "m8", "name": "Any Matches?", "type": "n8n-nodes-base.if", "typeVersion": 2.2, "position": [1248, 112], "parameters": { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "leftValue": "={{ $json.hasMatches }}", "operator": { "type": "boolean", "operation": "true", "singleValue": true } }], "combinator": "and" } } },
+    { "id": "m9", "name": "Email Me Matches", "type": "n8n-nodes-base.gmail", "typeVersion": 2.2, "position": [1472, 112], "parameters": { "resource": "message", "operation": "send", "sendTo": "you@example.com", "subject": "={{ $json.subject }}", "emailType": "html", "message": "={{ $json.html }}", "options": {} } },
+    { "id": "m10", "name": "README", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-560, -180], "parameters": { "color": 3, "width": 500, "height": 440, "content": "## Monitor a community forum for questions to answer with AI\n\n**Who's it for**\nDeveloper advocates and community experts who want to find forum questions worth their time.\n\n**How it works**\nEvery 30 min it pulls a Discourse forum's latest.json, an LLM scores each topic vs your expertise, and you get an email of only the matches with reasons and talking points.\n\n**How to set up**\n1. Add OpenRouter + Gmail credentials.\n2. Set your email in Email Me Matches.\n3. Edit expertise areas in the agent prompt.\n\n**Requirements**\n- An OpenRouter account and a Gmail account.\n\n**How to customize**\n- Point at any Discourse forum's latest.json; swap Gmail for Slack/Discord." } },
+    { "id": "m11", "name": "Step note", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-40, -190], "parameters": { "color": 7, "width": 980, "height": 90, "content": "### Flow\nFetch Forum Latest → Prep Topics → Match Against Expertise (LLM) → Format Digest → Any Matches? → Email." } }
+  ],
+  "connections": {
+    "Every 30 Minutes": { "main": [[{ "node": "Fetch Forum Latest", "type": "main", "index": 0 }]] },
+    "Fetch Forum Latest": { "main": [[{ "node": "Prep Topics", "type": "main", "index": 0 }]] },
+    "Prep Topics": { "main": [[{ "node": "Match Against Expertise", "type": "main", "index": 0 }]] },
+    "Match Against Expertise": { "main": [[{ "node": "Format Digest", "type": "main", "index": 0 }]] },
+    "LLM via OpenRouter": { "ai_languageModel": [[{ "node": "Match Against Expertise", "type": "ai_languageModel", "index": 0 }]] },
+    "Matches Parser": { "ai_outputParser": [[{ "node": "Match Against Expertise", "type": "ai_outputParser", "index": 0 }]] },
+    "Format Digest": { "main": [[{ "node": "Any Matches?", "type": "main", "index": 0 }]] },
+    "Any Matches?": { "main": [[{ "node": "Email Me Matches", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "meta": {}
+}

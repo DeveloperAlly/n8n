@@ -1,0 +1,31 @@
+{
+  "name": "AI Trend Curation",
+  "nodes": [
+    { "id": "t1", "name": "Every 6 Hours", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.3, "position": [0, 112], "parameters": { "rule": { "interval": [{ "field": "hours", "hoursInterval": 6 }] } } },
+    { "id": "t2", "name": "Hacker News Feed", "type": "n8n-nodes-base.rssFeedRead", "typeVersion": 1.2, "position": [224, 16], "parameters": { "url": "https://hnrss.org/frontpage", "options": {} } },
+    { "id": "t3", "name": "Merge Feeds", "type": "n8n-nodes-base.merge", "typeVersion": 3.2, "position": [448, 112], "parameters": { "mode": "append" } },
+    { "id": "t4", "name": "TechCrunch AI Feed", "type": "n8n-nodes-base.rssFeedRead", "typeVersion": 1.2, "position": [224, 208], "parameters": { "url": "https://techcrunch.com/category/artificial-intelligence/feed/", "options": {} } },
+    { "id": "t5", "name": "Collect Items", "type": "n8n-nodes-base.aggregate", "typeVersion": 1, "position": [672, 112], "parameters": { "aggregate": "aggregateAllItemData", "destinationFieldName": "items", "include": "allFields" } },
+    { "id": "t6", "name": "Score & Rank Trends", "type": "@n8n/n8n-nodes-langchain.agent", "typeVersion": 3.1, "position": [896, 112], "parameters": { "promptType": "define", "text": "=Recent feed items as JSON. Pick the 10 most relevant, trending items for an AI/automation audience and score each 1-10.\n\n{{ JSON.stringify($json.items) }}", "hasOutputParser": true, "options": { "systemMessage": "You are a trend analyst for an AI/automation newsletter. Select the most relevant/trending items, score each 1-10, and give a one-line content angle. Return JSON with a \"trends\" array of {title, url, score, angle}. Only use items present in the input." } } },
+    { "id": "t7", "name": "LLM via OpenRouter", "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter", "typeVersion": 1, "position": [912, 336], "parameters": { "model": "anthropic/claude-sonnet-4" } },
+    { "id": "t8", "name": "Trends Parser", "type": "@n8n/n8n-nodes-langchain.outputParserStructured", "typeVersion": 1.3, "position": [1040, 336], "parameters": { "schemaType": "fromJson", "jsonSchemaExample": "{ \"trends\": [{ \"title\": \"Headline\", \"url\": \"https://example.com\", \"score\": 8, \"angle\": \"content angle\" }] }" } },
+    { "id": "t9", "name": "Expand Trends", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1248, 112], "parameters": { "mode": "runOnceForAllItems", "jsCode": "const out=$input.first().json.output||{};\nconst trends=Array.isArray(out.trends)?out.trends:[];\nconst date=new Date().toISOString().slice(0,10);\nreturn trends.map(t=>({ json: { date, title:t.title||'', url:t.url||'', score:t.score||'', angle:t.angle||'' } }));" } },
+    { "id": "t10", "name": "Append to Google Sheet", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [1472, 112], "parameters": { "resource": "sheet", "operation": "append", "documentId": { "__rl": true, "mode": "list", "value": "" }, "sheetName": { "__rl": true, "mode": "list", "value": "" }, "columns": { "mappingMode": "autoMapInputData", "value": {}, "schema": [{ "id": "date", "displayName": "date", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }, { "id": "title", "displayName": "title", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }, { "id": "url", "displayName": "url", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }, { "id": "score", "displayName": "score", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }, { "id": "angle", "displayName": "angle", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }] }, "options": { "useAppend": true } } },
+    { "id": "t11", "name": "README", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-560, -180], "parameters": { "color": 3, "width": 500, "height": 440, "content": "## Curate trending news from RSS feeds and score it with AI\n\n**Who's it for**\nNewsletter writers, creators and marketers who want a ranked, de-noised feed of what matters each day.\n\n**How it works**\nEvery 6h it reads RSS feeds, merges/aggregates them, and an LLM selects and scores the most relevant trending items with a content angle. The list is appended to a Google Sheet.\n\n**How to set up**\n1. Add OpenRouter + Google Sheets credentials.\n2. Select the destination spreadsheet/sheet.\n3. Replace or add RSS feed URLs.\n\n**Requirements**\n- An OpenRouter account and a Google account.\n\n**How to customize**\n- Add more RSS feeds; edit the audience/scoring rules; send to Notion/Slack instead." } },
+    { "id": "t12", "name": "Step note", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-40, -190], "parameters": { "color": 7, "width": 980, "height": 90, "content": "### Flow\nRSS feeds → Merge Feeds → Collect Items → Score & Rank Trends (LLM) → Expand Trends → Append to Google Sheet." } }
+  ],
+  "connections": {
+    "Every 6 Hours": { "main": [[{ "node": "Hacker News Feed", "type": "main", "index": 0 }, { "node": "TechCrunch AI Feed", "type": "main", "index": 0 }]] },
+    "Hacker News Feed": { "main": [[{ "node": "Merge Feeds", "type": "main", "index": 0 }]] },
+    "Merge Feeds": { "main": [[{ "node": "Collect Items", "type": "main", "index": 0 }]] },
+    "TechCrunch AI Feed": { "main": [[{ "node": "Merge Feeds", "type": "main", "index": 1 }]] },
+    "Collect Items": { "main": [[{ "node": "Score & Rank Trends", "type": "main", "index": 0 }]] },
+    "Score & Rank Trends": { "main": [[{ "node": "Expand Trends", "type": "main", "index": 0 }]] },
+    "LLM via OpenRouter": { "ai_languageModel": [[{ "node": "Score & Rank Trends", "type": "ai_languageModel", "index": 0 }]] },
+    "Trends Parser": { "ai_outputParser": [[{ "node": "Score & Rank Trends", "type": "ai_outputParser", "index": 0 }]] },
+    "Expand Trends": { "main": [[{ "node": "Append to Google Sheet", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "meta": {}
+}
