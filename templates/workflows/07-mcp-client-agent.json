@@ -1,0 +1,19 @@
+{
+  "name": "AI Agent with MCP Client (call any MCP server)",
+  "nodes": [
+    { "id": "5cbf56d6-a2b9-4777-b449-e78de71575e9", "name": "When Chat Message Received", "type": "@n8n/n8n-nodes-langchain.chatTrigger", "typeVersion": 1.4, "position": [0, 112], "parameters": { "public": false, "options": {} } },
+    { "id": "fb43da23-5e81-4a05-9d18-8896fd386a90", "name": "MCP Agent", "type": "@n8n/n8n-nodes-langchain.agent", "typeVersion": 3.1, "position": [224, 112], "parameters": { "promptType": "auto", "options": { "systemMessage": "You are an assistant that can call tools exposed by a connected MCP server. Use the available MCP tools to answer the user request, then reply clearly." } } },
+    { "id": "bc4bb628-438b-4269-af23-f12d4cf44480", "name": "LLM via OpenRouter", "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter", "typeVersion": 1, "position": [240, 336], "parameters": { "model": "anthropic/claude-sonnet-4" } },
+    { "id": "09d2f1e7-d35d-4ab4-9c11-3b66ece7c816", "name": "MCP Server Tools", "type": "@n8n/n8n-nodes-langchain.mcpClientTool", "typeVersion": 1.2, "position": [368, 336], "parameters": { "endpointUrl": "https://your-mcp-server.example/mcp", "serverTransport": "httpStreamable", "authentication": "none", "include": "all", "options": {} } },
+    { "id": "000f1d13-81d0-4573-abbd-4a541b4bc702", "name": "README", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-560, -180], "parameters": { "color": 3, "width": 500, "height": 460, "content": "## Give an AI agent tools from any MCP server\n\n**Who's it for**\nBuilders who want an n8n AI agent to use tools exposed by an external MCP (Model Context Protocol) server.\n\n**How it works**\nA chat message goes to an AI Agent connected to an external MCP server via the MCP Client Tool node; the agent discovers and calls that server's tools, then replies.\n\n**How to set up**\n1. Add an OpenRouter credential to the model.\n2. In MCP Server Tools set your MCP endpointUrl (+ transport/auth if needed).\n3. Open the chat and ask something the server's tools can answer.\n\n**Requirements**\n- An OpenRouter account and a reachable MCP server endpoint.\n\n**How to customize**\n- Point at any MCP server; restrict tools via Include; swap the trigger or model." } },
+    { "id": "df9ef99a-d343-463f-92c9-da4050676b88", "name": "Step note", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-40, -190], "parameters": { "color": 7, "width": 720, "height": 110, "content": "### Flow\nWhen Chat Message Received → MCP Agent (model + MCP Server Tools client) → reply." } }
+  ],
+  "connections": {
+    "When Chat Message Received": { "main": [[{ "node": "MCP Agent", "type": "main", "index": 0 }]] },
+    "LLM via OpenRouter": { "ai_languageModel": [[{ "node": "MCP Agent", "type": "ai_languageModel", "index": 0 }]] },
+    "MCP Server Tools": { "ai_tool": [[{ "node": "MCP Agent", "type": "ai_tool", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "meta": {}
+}
