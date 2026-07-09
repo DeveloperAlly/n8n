@@ -1,0 +1,20 @@
+{
+  "name": "AI Content Repurposer",
+  "nodes": [
+    { "id": "dbf8f506-0a74-44c2-87ee-df85dcd06813", "name": "Receive Content", "type": "n8n-nodes-base.webhook", "typeVersion": 2.1, "position": [0, 112], "parameters": { "httpMethod": "POST", "path": "repurpose-content", "responseMode": "lastNode", "responseData": "firstEntryJson" } },
+    { "id": "50a882d8-63a1-4875-8278-2af334bf6e26", "name": "Normalize Input", "type": "n8n-nodes-base.set", "typeVersion": 3.4, "position": [224, 112], "parameters": { "mode": "manual", "includeOtherFields": false, "assignments": { "assignments": [ { "id": "content", "name": "content", "value": "={{ $json.body?.content ?? $json.content ?? \"\" }}", "type": "string" }, { "id": "title", "name": "title", "value": "={{ $json.body?.title ?? $json.title ?? \"Untitled\" }}", "type": "string" }, { "id": "target_audience", "name": "target_audience", "value": "={{ $json.body?.target_audience ?? $json.target_audience ?? \"general\" }}", "type": "string" } ] } } },
+    { "id": "1de14199-52b6-444d-adb8-6e01caf601ff", "name": "Content Repurposer Agent", "type": "@n8n/n8n-nodes-langchain.agent", "typeVersion": 3.1, "position": [448, 112], "parameters": { "promptType": "define", "text": "=Title: {{ $json.title }}\nTarget Audience: {{ $json.target_audience }}\n\nContent to repurpose:\n{{ $json.content }}", "hasOutputParser": true, "options": { "systemMessage": "You are a content repurposing specialist. You take long-form content and repurpose it into 3 platform-ready formats.\n\nRules:\n1. twitter_thread — an array of max 5 tweets, each under 280 characters, punchy, threaded.\n2. linkedin_post — a single professional-tone post, max 1300 characters.\n3. newsletter_blurb — exactly 2-3 sentences that hook the reader.\n\nTailor tone to the target audience. Return structured JSON with exactly these 3 fields." } } },
+    { "id": "7bbce809-e4a2-4bd8-bf29-55bcbc7d3504", "name": "Claude via OpenRouter", "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter", "typeVersion": 1, "position": [464, 336], "parameters": { "model": "anthropic/claude-sonnet-4" } },
+    { "id": "af50d5f8-bd15-4351-aa46-12ba20936a14", "name": "JSON Output Parser", "type": "@n8n/n8n-nodes-langchain.outputParserStructured", "typeVersion": 1.3, "position": [592, 336], "parameters": { "schemaType": "fromJson", "jsonSchemaExample": "{ \"twitter_thread\": [\"Tweet 1\", \"Tweet 2\"], \"linkedin_post\": \"Post text\", \"newsletter_blurb\": \"Hook text.\" }" } },
+    { "id": "4f7afa87-19ed-482f-a0bc-0ce8b69b00d6", "name": "README", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-620, -80], "parameters": { "color": 3, "width": 460, "height": 420, "content": "## Repurpose blog posts into social media content with AI\n\n**Who's it for**\nContent creators and developer advocates who write long-form content and want X, LinkedIn and newsletter versions without rewriting by hand.\n\n**How it works**\nPOST long-form content to the webhook; an AI Agent (Claude via OpenRouter) with a structured parser returns a Twitter/X thread, a LinkedIn post and a newsletter blurb as JSON.\n\n**How to set up**\n1. Add an OpenRouter credential to the model node.\n2. Activate and copy the webhook URL.\n3. POST { content, title, target_audience } to /webhook/repurpose-content.\n\n**Requirements**\n- An OpenRouter account (or swap the model node).\n\n**How to customize**\n- Edit the system prompt to change tone/platforms; change the model; extend the parser schema." } }
+  ],
+  "connections": {
+    "Receive Content": { "main": [[{ "node": "Normalize Input", "type": "main", "index": 0 }]] },
+    "Normalize Input": { "main": [[{ "node": "Content Repurposer Agent", "type": "main", "index": 0 }]] },
+    "Claude via OpenRouter": { "ai_languageModel": [[{ "node": "Content Repurposer Agent", "type": "ai_languageModel", "index": 0 }]] },
+    "JSON Output Parser": { "ai_outputParser": [[{ "node": "Content Repurposer Agent", "type": "ai_outputParser", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "meta": {}
+}
