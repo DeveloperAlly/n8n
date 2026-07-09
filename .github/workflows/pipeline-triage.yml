@@ -1,0 +1,77 @@
+name: Pipeline Error Triage
+
+# Always-on triage + auto-fix for n8n pipeline failures.
+# Runs Claude (on your Pro subscription via CLAUDE_CODE_OAUTH_TOKEN — no paid API).
+# Triggers:
+#   - schedule: once daily
+#   - issues:   immediately when a new `pipeline-error` issue is opened/labeled
+#   - manual:   workflow_dispatch (optionally for a single issue number)
+
+on:
+  schedule:
+    # GitHub cron is UTC. 12:00 UTC = 08:00 America/Toronto (EDT) / 07:00 (EST).
+    - cron: "0 12 * * *"
+  issues:
+    types: [opened, labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Optional single issue number to triage. Blank = all open pipeline-error issues."
+        required: false
+
+# Never run two triage passes at once (avoids double comments / racing edits).
+concurrency:
+  group: pipeline-error-triage
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    # Schedule + manual always run. Issue events run ONLY for pipeline-error issues.
+    if: >
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' && contains(join(github.event.issue.labels.*.name, ','), 'pipeline-error'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write      # read repo + (optional) open fix PRs
+      issues: write        # comment + label
+      pull-requests: write # open proposal PRs
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Run Pipeline Error Triage
+        uses: anthropics/claude-code-action@v1
+        env:
+          # n8n REST API access (self-hosted key — free to create in n8n Settings > API)
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
+          # Public webhook of the "Discord Notify" n8n workflow (posts the daily summary)
+          DISCORD_NOTIFY_WEBHOOK: ${{ secrets.DISCORD_NOTIFY_WEBHOOK }}
+          # Set on issue/dispatch runs; empty on scheduled runs (= triage all open)
+          TRIAGE_ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}
+        with:
+          # Auth on your Pro subscription (NOT the paid API). Generate with: claude setup-token
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Allow issues created by non-write users to still trigger triage
+          allowed_non_write_users: "*"
+          claude_args: |
+            --max-turns 60
+            --allowedTools "Bash,Read,Grep,Glob"
+          prompt: |
+            You are the automated Pipeline Error Triage agent for this repository.
+            Read the file .github/PIPELINE_TRIAGE.md in this checkout and follow it EXACTLY,
+            including every hard guardrail.
+
+            Runtime context:
+            - Repository: ${{ github.repository }}
+            - Trigger: ${{ github.event_name }}
+            - TRIAGE_ISSUE_NUMBER env var: if non-empty, triage ONLY that one issue; if empty, triage ALL open issues labelled `pipeline-error`.
+            - Use the `gh` CLI (already authenticated via GITHUB_TOKEN) for all GitHub actions.
+            - Use `curl` with the N8N_BASE_URL and N8N_API_KEY env vars to inspect/fix n8n workflows.
+            - Post the run summary by POSTing JSON {"message":"..."} to the DISCORD_NOTIFY_WEBHOOK env var.
